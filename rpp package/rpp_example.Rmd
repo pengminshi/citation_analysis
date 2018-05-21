@@ -1,0 +1,95 @@
+---
+title: "Usage of rpp functions"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Usage of main function
+
+First source the **rpp.R** file
+
+```{r cars}
+source('rpp.R')
+```
+
+The main function is `fitRPP(citation.times, ...)`, where `citation.times` is a vector $\{t_i\}_{i=1}^n$ of when each citation is recieved by the paper, which is recorded by number of days after the paper was published. 
+
+For example, a paper X was published in 2000.01.01, then it received the first citation $50$ days later, the second citations arrived $75$ days later, and so on. If the papers has received $n$ citations in 10 years, then `citation.times`$= (50,75,... t_n)$. 
+
+Input parameter:
+
+* `citation.times`:  a vector indicating the arriving time of each citation $\{t_i\}_{i=1}^n$
+* `m`:               (optional) the global constant, suggested m = 30 by the science paper, as the defalt.
+* `time.T`          (optional) the observation time $[0,T]$, so that $0\leq t_1 \leq t_2\leq \ldots \leq t_n \leq T$. If not given, use the last citation arriving time as $T$, so that $T = tn$.
+* `verbose` (optional) boolean, whether to output esitmation at each step, by default is False.
+* `mu.init` (optional) the initial value of $\mu$.
+* `sigma.init` (optional) the initial value of $\sigma$.
+* `max.iter` (optional) the maximum number of iteration in gradient descent, by default $1000$.
+* `eps` (optional) topping accuracy, by default $10^{(-8)}$.
+
+Output:
+
+A list containing the estimated parameters `mu`, `sigma`, `lambda` = $\hat\mu,\hat\sigma$ and `converge` shows whether the optimization converges after `max.iter` iterations.
+
+```{r, eval=FALSE}
+fit = fitRPP(citation.times, m = 30, time.T = 10*365)
+```
+
+
+## Example
+Here we generate citations of a paper following the model in the science paper. Given parameter $(\lambda, \mu,\sigma)$, the accumulative citation counts $c(t)$ follows
+$$c(t) = m(e^{\lambda F(t;\mu,\sigma)}-1)$$
+where $F(t;\mu,\sigma) = \int_{0}^tf(x;\mu,\sigma)dx$ and $f(x,\mu,\sigma)$ is a log normal density function with mean $\mu$ sd $\sigma$, m is a global constant, suggested as $30$ by the paper.
+
+```{r}
+# generate the citation times of the paper, 
+# that happen within 10 years (10 * 365 days)
+time.T = 10 * 365
+citation.time.example = citationGenerator(time.T = time.T , lambda = 3,
+                                          mu = 7, sigma = 1, m = 30)
+(n = length(citation.time.example)) # number of citations received in t between [0, time.T]
+```
+
+Then add some noise
+
+```{r}
+citation.time.example = citation.time.example + rnorm(n, 0,50)
+citation.time.example[citation.time.example < 1] = 1
+citation.time.example[citation.time.example > time.T ] = time.T 
+citation.time.example = sort(citation.time.example, decreasing = F)
+```
+
+
+
+Count the yearly citations
+
+```{r, fig.height = 4, fig.width = 4.5, fig.align = "center"}
+# the function count the citations per year
+yearly.counts = citationYearlyCount(citation.time.example)
+plot(yearly.counts, type = 'b', xlab = 'years', 
+     main = 'Paper yearly citation counts')
+```
+
+
+Then fit RPP model to estimate the parameters
+```{r}
+fit = fitRPP(citation.time.example, time.T = 10 * 365)
+fit
+```
+
+```{r, fig.height = 4, fig.width = 4.5, fig.align = "center"}
+fitted.citation = citationGenerator(time.T = 10 * 365, lambda = fit$lambda,
+                                          mu = fit$mu, sigma = fit$sigma, m = 30)
+fit.yearly.counts =  citationYearlyCount(fitted.citation)
+
+plot(yearly.counts, type = 'b',col = 'black', xlab = 'years', 
+     main = 'Paper yearly citation counts')
+points(fit.yearly.counts, col = 'blue', lty = 2, type = 'b',pch = 3)
+legend('topright', legend=c('true', 'fitted'), 
+       col = c('black','blue'), lty = 1:2, pch = c(1,3))
+```
+
+ 
