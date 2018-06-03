@@ -239,3 +239,74 @@ myROC <- function(true.label, pred.prob1, type = 'classification', n.breaks = 10
     }
     return(list(spec = spec, sens = sens))
 }
+
+
+targetFeaturePlot <- function(data, feature.ind, target.ind, y.lab = NULL){
+    # plot the features
+    par(mfrow = c(3,5), mai = c(0.6,0.3,0.1,0.1))
+    if(is.null(y.lab)){
+        y.lab = 'target'
+    }
+    
+    for(i in feature.ind){
+        plot(data[,i], data[,target.ind], xlab =names(data)[i], ylab =y.lab,
+             col = scales::alpha('black',0.5), cex = 0.5, pch = 16)
+        fit = lm(data[,target.ind] ~ data[,i])
+        abline(fit, col='red', lwd=1)
+    }
+    par(mfrow = c(1,1), mar = rep(4,4))
+} 
+
+
+color.bar <- function(lut, min, max, nticks=11, ticks=seq(min, max, len=nticks), title='') {
+    scale = (length(lut)-1)/(max-min)
+    
+    dev.new(width=1.75, height=5)
+    plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title)
+    axis(2, ticks, las=1)
+    for (i in 1:(length(lut)-1)) {
+        y = (i-1)/scale + min
+        rect(0,y,10,y+1/scale, col=lut[i], border=NA)
+    }
+}
+
+
+fitNLS <- function(paper, m, k.smoothing = NULL){
+    
+    n.years = length(paper$years)
+    
+    if(!is.null(k.smoothing)){
+        citperyear = citationSmoothing(paper$citperyear, k.smoothing)
+    } else{
+        citperyear = paper$citperyear
+    }
+    
+    df = data.frame(t = 1:n.years*365, ct = cumsum(citperyear))
+    fit = minpack.lm::nlsLM(ct  ~ m*(exp(lambda * plnorm(t, meanlog = mu, sdlog = sigma))-1), 
+                            start=list(lambda = 3, mu = 8, sigma = 1),
+                            data = df,control = list(maxiter = 100))
+    
+    return(list(lambda = coef(fit)['lambda'],
+                mu = coef(fit)['mu'],
+                sigma = coef(fit)['sigma'],
+                converge = fit$convInfo$isConv))
+}
+
+# smoothing the citation with the k nearest neigher years
+citationSmoothing <- function(citperyear, k.smoothing){
+    n.year = length(citperyear)
+    
+    if (n.year < k.smoothing + 1){
+        cat('WARNING! Not enough years to smooth.')
+        k.smoothing = n.year - 1
+    }
+    
+    citperyear.new = citperyear
+    for ( i in (k.smoothing+1): n.year){
+        smoothing.ind = max(1, i-k.smoothing) : min(n.year, i + k.smoothing)
+        citperyear.new[i] = mean(citperyear[smoothing.ind])
+    }
+    citperyear.new = ceiling(citperyear.new)
+    
+    return(citperyear.new)
+}

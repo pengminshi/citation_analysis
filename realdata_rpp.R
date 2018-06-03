@@ -26,47 +26,85 @@ papers.list  = lapply(1:n.papers,
 
 # use the average reference counts as m
 m = mean(sapply(paperRefnewTrim[papers.ind], function(x) length(x)))
+
+# ########
+# # awakening time
+# source(paste(source.path, 'SBfunctions.R', sep = ''))
+# SB.list = lapply(1:n.papers, function(i){
+#     paper = papers.list[[i]]
+#     # sb.out = SBCoefficient3(paper$citperyear, paper$years,
+#     #                         k.smoothing = 1, eta = 1/2)
+#     sb.out = SBCoefficient2(paper$citperyear, paper$years,
+#                             k.smoothing = 0)
+# })
+# sb.cut = 20
+
+#####
 fit.result =  lapply(1:n.papers, function(i) {
     cat(i,'\n')
-    out = rppAnalysis(paper = papers.list[[2203]], m.list = m,
-                      fit.nyears = NULL, nyear.extend = 20,
+    # # starting from awakening time if sb coef is greater than mean
+    # if( SB.list[[i]]$sleeping.coef > sb.cut){
+    #     at = SB.list[[i]]$awaken.time
+    #     sleeping.time = at - min(papers.list[[i]]$years +1)
+    # } else{
+    #     at = NULL
+    #     sleeping.time = 0
+    # }
+    out = rppAnalysis(paper = papers.list[[2586]], m.list = m,
+                      fit.nyears = NULL, nyear.extend = 100,
                       real.only = F, k.smoothing = 0, decay.type = 'lognormal',
                       verbose = F, max.iter = 1000, plot = T,
                       mu.init = 8, sigma.init = 1,eps = 10^(-8),
-                      n.day = 365, main = NULL, awake.time =NULL,
+                      n.day = 365, main = NULL, awake.time = 2004,
                       alpha = 3, beta = 1)
-    return(out$fit.parameters[[1]])
+    if(out == -1){
+        return(-1)
+    }else{
+        return(list(mu = out$fit.parameters[[1]]$mu,
+                    sigma = out$fit.parameters[[1]]$sigma,
+                    lambda = out$fit.parameters[[1]]$lambda,
+                    converge = out$fit.parameters[[1]]$converge))
+                    #sleeping.years = sleeping.time))
+    }
 })
+
+
+##############################
+# fit NLS model
+source.path = '/Users/PengMinshi/Dropbox/research/citation/code/'
+source(paste(source.path, 'functions.R', sep = ''))
+fit.result = lapply(1:n.papers, function(i){
+    cat(i,'\n')
+    fitNLS(papers.list[[i]], m)
+})
+
 # save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter.RData')
 # save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha4_beta1.RData')
 # save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1.RData')
-# save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1_smooth1.RData')
-#save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1_smooth2.RData')
+# save(fit.result, papers.ind, n.papers,papers.list,m, file = '/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1_sleeping20.RData')
 #####################################################################
 # fillter out the unconverged results
 load('/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter.RData')
 load('/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha4_beta1.RData')
 load('/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1.RData')
-load('/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1_smooth1.RData')
-load('/Users/PengMinshi/Dropbox/research/citation/code/results/fit_3_parameter_alpha3_beta1_smooth2.RData')
-flag.conv = sapply(1:n.papers, function(i) fit.result[[i]]$converge)
+tmp.ind = which(sapply(1:n.papers, function(i) length(fit.result[[i]])!=1))
+flag.conv = sapply(tmp.ind, function(i) fit.result[[i]]$converge)
+tmp.ind = tmp.ind[flag.conv]
 # cut the lambda, so there is not extremly large values
-lambda = sapply(1:n.papers, function(i) fit.result[[i]]$lambda)
-flag = flag.conv & lambda <= max(lambda)
+lambda = sapply(tmp.ind, function(i) fit.result[[i]]$lambda)
+mu = sapply(tmp.ind, function(i) fit.result[[i]]$mu)
+sigma = sapply(tmp.ind, function(i) fit.result[[i]]$sigma)
+#sleep.years = sapply(tmp.ind, function(i) fit.result[[i]]$sleeping.years)
 
-lambda = lambda[flag]
-mu = sapply(1:n.papers, function(i) fit.result[[i]]$mu)[flag]
-sigma = sapply(1:n.papers, function(i) fit.result[[i]]$sigma)[flag]
-
-papers.list = papers.list[flag]
-papers.ind = papers.ind[flag]
+papers.list = papers.list[tmp.ind]
+papers.ind = papers.ind[tmp.ind]
 n.papers = length(papers.ind)
 #####################################################################
 # comparison of the true accumulative citation counts and the citations counts from model 
 source.path = '/Users/PengMinshi/Dropbox/research/citation/code/'
 source(paste(source.path, 'functions.R', sep = ''))
 source(paste(source.path, 'rpp package/rpp.R', sep = ''))
-pred.year = 5
+pred.year = 15
 pred.cits = sapply(1:length(papers.list), function(i){
     out = citationFit(to.date = pred.year * 365, m = m,
                       lambda = lambda[i], mu = mu[i], sigma = sigma[i])
@@ -88,9 +126,23 @@ plot_y_yhat(y = true.cits, yhat = pred.cits, log = F,
 source(paste(source.path, 'loadFeatures.R', sep = ''))
 load.out = load_features(paper.ind = papers.ind)
 data = cbind(load.out$df,lambda, mu, sigma)
+#data = cbind(load.out$df,lambda = lambda.nls, mu, sigma)
 # log tranform
 data$lambda = log(data$lambda + 1)
 
+
+# 
+# test <- sample(1:n.papers, round(n.papers) * 0.2)
+# data.train = data[-test,]
+# data.test = data[test,]
+# x.train = data.train[,1:15] %>% data.matrix()
+# x.test = data.test[,1:15] %>% data.matrix()
+# 
+# lasso.cvfit.lambda = cv.glmnet(x.train, data.train$sleep.years , alpha = 1)
+# pred.sy = predict(lasso.cvfit.lambda, s = lasso.cvfit.lambda$lambda.min, newx = x.test) 
+# 
+# 
+targetFeaturePlot(data, feature.ind = 1:15, target.ind = 16)
 #####################################################################
 #####################################################################
 # the simple multivariate linear regression
@@ -335,7 +387,7 @@ library(e1071)
 library(randomForest)
 
 
-n.exp = 20
+n.exp = 5
 n.method = 7
 # initialize
 dn = list(exp = 1:n.exp, method = c('lm','lm step','lm ridge','lm lasso','svr.linear','svr.radial','rf'))
@@ -358,7 +410,7 @@ cor.log.spearman.15 =  matrix(0, nrow = n.exp, ncol = n.method)
 
 for(e in 1: n.exp){
     cat('experiment ', e,'\n')
-    for(m in 6){
+    for(m in c(1:4,7)){
         test <- sample(1:n.papers, round(n.papers) * 0.2)
         data.train = data[-test,]
         data.test = data[test,]
@@ -511,6 +563,11 @@ for(e in 1: n.exp){
         
     }
 }
+pr <- function(x, d = 2){
+    x = round(x,2)
+    paste(x, collapse = ' & ')
+}
+
 pr(apply(cor.lambda.hat, 2, mean))
 pr(apply(cor.mu.hat, 2, mean))
 pr(apply(cor.sigma.hat, 2, mean))
@@ -528,10 +585,7 @@ pr(apply(cor.log.spearman.5, 2,mean))
 pr(apply(cor.log.spearman.10, 2,mean))
 pr(apply(cor.log.spearman.15, 2,mean))
 
-pr <- function(x, d = 2){
-    x = round(x,2)
-    paste(x, collapse = ' & ')
-}
+
 
 
 ############################################################################################
@@ -561,6 +615,17 @@ plot( log(lambda.nls+1),log(total.cit+1), pch = 16, col = scales::alpha('black',
      xlab = expression(lambda*'(log) when '*mu*','*sigma*' fixed'), ylab ='total citatio counts(log)')
 plot(mu, sapply(1:n.papers, function(i) length(papers.list[[i]]$years)))
 
+c = mu
+gr = .bincode(c, seq(min(c), max(c), len=length(c)), include.lowest = T) # heat color
+col = colorRampPalette(c("yellow", "blue"))(length(c))[gr]
+plot(lambda.nls, lambda,col = col,
+     cex = 0.3, pch = 16,
+     xlab = expression(lambda*' when '*mu*','*sigma*' fixed'),
+     ylab = expression(lambda*' when fitting 3 params'))
+legend(5.6,12.5, legend= expression(' color =  '*mu*' ') )
+abline(b=1,a = 0, lty = 'dashed')
+
+# color.bar( colorRampPalette(c("yellow", "blue"))(100),min = 0.2, max =1)
 # example 2586
 
 #####################################################
@@ -576,11 +641,12 @@ B.list = sapply(1:n.papers, function(i){
     return(sb.out$sleeping.coef)
 })
 
-b = B.list 
+b = sqrt(B.list -min(B.list)+1)
 gr = .bincode(b, seq(min(b), max(b), len=length(b)), include.lowest = T) # heat color
-col = colorRampPalette(c("grey", "blue"))(length(b))[gr]
+col = colorRampPalette(c("yellow", "blue"))(length(b))[gr]
 
-plot(lambda.nls, lambda, col = col, pch = 16, cex = (b-min(b)+50)/(max(b)-min(b)+50),
+plot(lambda.nls, lambda, col = col, pch = 16, cex = (b-min(b)+0)/(max(b)-min(b)+0),
      xlab = expression(lambda*' when '*mu*','*sigma*' fixed'),
-     ylab = expression(lambda*' when fitting 3 params'))
+     ylab = expression(lambda*' when fitting 3 params'), ylim = c(1,14.4))
+legend(3,12.5, legend= expression(' color =  Sleeping Coef ') )
 abline(b=1,a = 0, lty = 'dashed')

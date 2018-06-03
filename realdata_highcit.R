@@ -40,6 +40,7 @@ data = data.frame(x.data, class = as.factor(y.data))
 #     abline(fit, col='red', lwd=1)
 # }
 # par(mfrow = c(1,1), mar = rep(4,4))
+targetFeaturePlot(data, feature.ind = 1:15, target.ind = 16)
 
 ###############################################################
 # random forest
